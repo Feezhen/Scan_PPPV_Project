@@ -310,20 +310,21 @@ void Dialog::show_reco()
 //    QString qstring = "now pwm_val: " + QString::number(pwm_val) + "\n";
 //    ui->textBrowser->insertPlainText(qstring);
 //    ui->textBrowser->moveCursor(QTextCursor::End);
-    Mat matOriginal =img_pv.clone();
-	Mat matOriginal2 =img_pp.clone();
+    Mat matOriginalPV =img_pv.clone();
+	Mat matOriginalPP =img_pp.clone();
 
-    cv::Mat final_roi_image, final_roi_imageEnhance, final_roi_image2, final_roi_imageEnhance2, reco_showImg, reco_showImg2;
+    cv::Mat final_roi_imagePV, final_roi_imageEnhancePV, reco_showImgPV, \
+		final_roi_imagePP, final_roi_imageEnhancePP, reco_showImgPP;
 
-	cv::imwrite("../run_file/reco_originalPV.bmp",matOriginal);
-	cv::imwrite("../run_file/reco_originalPP.bmp",matOriginal2);
-    final_roi_image = getRoiImg(matOriginal, true, "PV", e_rror, reco_showImg);
-	final_roi_image2 = getRoiImg(matOriginal2, true, "PP", e_rror, reco_showImg2);
+	cv::imwrite("../run_file/reco_originalPV.bmp",matOriginalPV);
+	cv::imwrite("../run_file/reco_originalPP.bmp",matOriginalPP);
+    final_roi_imagePV = getRoiImg(matOriginalPV, true, "PV", e_rror, reco_showImgPV);
+	final_roi_imagePP = matOriginalPP.clone()//先这么写着
 //    normalize2(final_roi_image);2
-    cv::imwrite("../run_file/reco_roipv.bmp",final_roi_image);
-    cv::imwrite("../run_file/valleypoint_recopv.bmp",reco_showImg);
-	cv::imwrite("../run_file/reco_roipp.bmp",final_roi_image2);
-    cv::imwrite("../run_file/valleypoint_recopp.bmp",reco_showImg2);
+    cv::imwrite("../run_file/reco_roipv.bmp",final_roi_imagePV);
+    cv::imwrite("../run_file/valleypoint_recopv.bmp",reco_showImgPV);
+	cv::imwrite("../run_file/reco_roipp.bmp",final_roi_imagePP);
+    // cv::imwrite("../run_file/valleypoint_recopp.bmp",reco_showImgPP);
 	if(e_rror == 1){
         qDebug() << "Can not get ROI !!!";
         ui->textBrowser->setFontPointSize(20);
@@ -336,34 +337,36 @@ void Dialog::show_reco()
         return;
     }
 
-    Enhancement(final_roi_image, final_roi_imageEnhance);
-    cv::imwrite("../run_file/Enhance_recopv.bmp",final_roi_imageEnhance);
-	Enhancement(final_roi_image2, final_roi_imageEnhance2);
-    cv::imwrite("../run_file/Enhance_recopp.bmp",final_roi_imageEnhance2);
-    ncnn::Mat feature2 = net.extract_feature(final_roi_imageEnhance);
-//    cout<<"extracted finished \n";
-    
+    Enhancement(final_roi_image, final_roi_imageEnhancePV);
+    cv::imwrite("../run_file/Enhance_recopv.bmp",final_roi_imageEnhancePV);
+	Enhancement(final_roi_imagePP, final_roi_imageEnhancePP);
+    cv::imwrite("../run_file/Enhance_recopp.bmp",final_roi_imageEnhancePP);
+	//掌脉
+    ncnn::Mat feature2 = net.extract_feature(final_roi_imageEnhancePV);
     ncnn::Mat feature2_flatten = feature2.reshape(feature2.w * feature2.h * feature2.c);
     vector<float> feature;
     feature.resize(feature2_flatten.w);
     cout<<"feature size: "<<feature.size()<<" feature2_flat: "<<feature2_flatten.w<<endl;
     for (int j=0; j<feature2_flatten.w; j++)
     {
-        // if(j % 10 == 0){
-        //     cout << endl;
-        // }
         feature[j] = feature2_flatten[j]; // 99
-        // cout << feature[j] << " ";
     }
-    //cout<<"feature vec:"<<feature[0]<<"  "<<feature[1]<<endl;
-    // vector<float> feature = extract_feature(final_roi_image);
-    float feature_array[feature.size()];
-    memcpy(feature_array,&feature[0],feature.size()*sizeof(feature[0]));
+    float feature_arrayPV[feature.size()];
+    memcpy(feature_arrayPV,&feature[0],feature.size()*sizeof(feature[0]));
+	//掌纹
+	feature2 = net.extract_feature(final_roi_imageEnhancePP);
+    feature2_flatten = feature2.reshape(feature2.w * feature2.h * feature2.c);
+    for (int j=0; j<feature2_flatten.w; j++)
+    {
+        feature[j] = feature2_flatten[j]; // 99
+    }
+    float feature_arrayPP[feature.size()];
+    memcpy(feature_arrayPP,&feature[0],feature.size()*sizeof(feature[0]));
 
     result final_result;
 	// clock_t start_time, end_time;
 	// start_time = clock();
-    final_result = recognition(feature_array);
+    final_result = recognition(feature_arrayPV, feature_arrayPP);
 	// end_time = clock();
 	// qDebug() << "ncnn recog time : " << ((end_time - start_time) * 1000.0 / CLOCKS_PER_SEC) << "ms\n";
 //    ui->textBrowser->setFontPointSize(24);
@@ -403,7 +406,7 @@ void Dialog::show_reco()
 			std::string str(score);
 			sprintf(score, "%.3f", final_result.score);
 			string ImgPath = hardOriginal + final_result.id + score + "_" + timeStamp + ".bmp";
-			cv::imwrite(ImgPath, matOriginal);
+			cv::imwrite(ImgPath, matOriginalPV);
 			ImgPath = hardRoi + final_result.id + score + "_" + timeStamp + ".bmp";
 			cv::imwrite(ImgPath, final_roi_image);
 		}
