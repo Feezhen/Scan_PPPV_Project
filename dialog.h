@@ -29,6 +29,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <time.h>
+#include <unistd.h>
 // 自己的头文件
 #include "ncnn_recognition/recognition.h"
 #include "measure_dis.h"
@@ -37,20 +38,26 @@
 #include "MCP/PointFeature.h"
 #include "MCP/ImgPreprocess.h"
 #include "utils.h"
-
+#include "Temperature.h"
 #include "Camera.h"
+#include "gate.h"
 // using namespace cv;
 /////////////////////////running status//////////////////////////////////////
 enum flags {reg, rec};
 // enum camID {camid0, camid1}
 /////////////////////////////////////////////////////////////////////////////
-
+struct CropParam
+{
+    int rotateangle;
+    cv::Point square_point;
+    int dis;
+};
 
 
 /////////////////////////宏定义///////////////////////////////////////////////
 #define NCNN
 
-#define feature_dim 256
+#define feature_dim 1280
 
 #ifdef NCNN
 #define register_num 10
@@ -110,12 +117,13 @@ public:
     #else
 	result recognition(vector<cv::Point> PointVector_rec, vector<vector<float>> FeatureDescriptor_rec);
     #endif
-
+    int getRoi(cv::Mat matOriginal, cv::Mat& output);
+    int roi_panduan(cv::Mat img, cv::Mat& roi);//
     void adjust_cam();
     void detectAndDisplay(cv::Mat frame);
     void RestoreVectors(std::vector<std::vector<cv::Rect>>& vecs_bank, std::vector<cv::Rect>& vecAll);
     //*************截取手掌roi，参考王浩师兄代码*************
-    cv::Mat getRoiImg(cv::Mat PalmveinImg, bool flag_showImg, std::string imgName, int & e_rror, cv::Mat &showImg2);
+    cv::Mat getRoiImg(cv::Mat PalmveinImg, bool flag_showImg, std::string imgName, int & e_rror, cv::Mat &showImg2, CropParam & CP);
     cv::Mat finger_segmentation(cv::Mat img);
     cv::Mat prewitt_segmentation(cv::Mat img, std::string PPorPV);
     void imageblur(cv::Mat& src, cv::Mat& dst, cv::Size size, int threshold);
@@ -124,9 +132,10 @@ public:
     void bwareaopen2(cv::Mat &src);
     void getMaxRegion(cv::Mat srcImg, cv::Mat& dstImg, cv::Point* maxarea_point, int& totalnum, int& e_rror);
     int get_square_twopoints(cv::Point* areapoint, int& totalnum, int& beginpoint, cv::Point& centroidpoint, cv::Point* square_point, std::vector<cv::Point>& fingerpoint, cv::Mat& backImg, int& e_rror);
-    cv::Mat get_palm_ROI(cv::Mat srcImg, const cv::Point* square_points, int &e_rror);
+    cv::Mat get_palm_ROI(cv::Mat srcImg, const cv::Point* square_points, int &e_rror, CropParam & CP);
     double Dis_of_twoPoint(cv::Point point1, cv::Point point2);
     int find_extremum(double* Dis, int totalnum, int position, int length_limit, bool isMax, double* disValley, int num, cv::Mat& backImg, cv::Point* areapoint, int startpoint);
+    
     void rotateImage(cv::Mat srcImg, cv::Mat& rotateImg, cv::Point2f rotatecenter, int rotateangle);
     ~Dialog();
     //*************类外函数***********
@@ -167,7 +176,7 @@ private:
     QSqlQuery query;
     QImage qimgOriginal;
     QImage qimgProcessed;
-
+    CropParam CP;
     // std::string palm_cascade_name = "/home/pi/Downloads/qt/palm.xml";
     // cv::CascadeClassifier palm_cascade;
 
@@ -180,6 +189,7 @@ private:
 
     QThread *thread;
     measure_dis *meas1;
+    //A4gate* gatecontrol;
 };
 
 int OTSU(cv::Mat image);

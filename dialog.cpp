@@ -27,9 +27,18 @@ using namespace cv;
 using namespace std;
 CAMERA cam0(0, 640, 480);
 CAMERA cam1(2, 640, 480);
+Temperature temperature("/dev/i2c-1",0x5a);
+A4gate gate1(false);
 
+cv::Mat imgset_pv[31];
+cv::Mat imgset_pp[31];
+
+ 
+// 线程
 auto t_cam0 = async(&CAMERA::update_img , &cam0);
 auto t_cam1 = async(&CAMERA::update_img , &cam1);
+auto t_temp = async(&Temperature::GET_Temperature , &temperature);
+auto t_gate = async(&A4gate::Gate_control, &gate1);
 
 // 排序
 template <typename T>
@@ -58,7 +67,7 @@ Dialog::Dialog(QWidget *parent) : QDialog(parent),ui(new Ui::Dialog)
 
 	//相机线程
 	
-
+	//gatecontrol = new A4gate(false);
     thread = new QThread(); // 子线程测量距离
     meas1 = new measure_dis();
 
@@ -174,28 +183,84 @@ void Dialog::get_palmImg() // 读取子线程的图片
 
 
 	if(rec_reg_finished_temp){
-		roi_count++;
+		// roi_count++;
 		mutex_main.lock();
 		rec_reg_finished = false;
+		mutex_main.unlock();
 		//vector<Mat> mainImg_vector(meas1->Img_vector);
 		//取相机图片
-		std::vector<uint8_t> buffer1_shibie;
+		// int flag_stop_shibie=3000;
+        // int flag=1;
+        // flag_stop_shibie--;
+        // io.lED_ON();
+		// digitalWrite(LEDPin, HIGH); //打光
+        // int cnt111=0;
+        // int x=0;
+        // int i=0;
+		// int flag_roi=0;
+		string path_tezhengduiying="../run_file/shuju1/ceshi/";
+    	string path_tezhengduiying_pp="../run_file/shuju1/ceshi_pp/";
+        
+        std::vector<uint8_t> buffer1_shibie;
 		std::vector<uint8_t> buffer2_shibie;
-		cv::Mat img0_shibie = cv::Mat::zeros(height, width, CV_8UC3);
-		cv::Mat img1_shibie = cv::Mat::zeros(height, width, CV_8UC3);
-		cam0.get_img(buffer1_shibie);
-		cam1.get_img(buffer2_shibie);
-		img_pp=cv::Mat::zeros(height, width, CV_8UC3);
-		img_pv=cv::Mat::zeros(height, width, CV_8UC3);
-		memcpy(img_pp.data, buffer1_shibie.data(), buffer1_shibie.size());
-		memcpy(img_pv.data, buffer2_shibie.data(), buffer2_shibie.size());
+		
+		for(int i=0;i<30;i++){
+				imgset_pv[i]=cv::Mat::zeros(height, width, CV_8UC3);
+				imgset_pp[i]=cv::Mat::zeros(height, width, CV_8UC3);
+			}
+        
+        for(int i=0;i<30;i++)
+        {
+            // this_thread::sleep_for(chrono::milliseconds(10));
+			sleep(0.01);
+            //cout<<"111"<<endl;
+            cam0.get_img(buffer1_shibie);
+            cam1.get_img(buffer2_shibie);
+            //cout<<"222"<<endl; 
+            cv::Mat img_pp=cv::Mat::zeros(height, width, CV_8UC3);
+            cv::Mat img_pv=cv::Mat::zeros(height, width, CV_8UC3);
+            memcpy(img_pp.data, buffer1_shibie.data(), buffer1_shibie.size());
+            memcpy(img_pv.data, buffer2_shibie.data(), buffer2_shibie.size());
+			// QImage qimgOriginal((uchar*)img_pv.data, img_pv.cols, img_pv.rows, img_pv.step, QImage::Format_RGB888);
+			// ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+			// QImage qimgOriginal2((uchar*)img_pp.data, img_pp.cols, img_pp.rows, img_pp.step, QImage::Format_RGB888);
+			// ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+            //cout<<"333"<<endl;		
+            imgset_pv[i]=img_pv;
+            imgset_pp[i]=img_pp;
+            //cout<<"444"<<endl;
+        }
+        // io.lED_OFF();
+		// digitalWrite(LEDPin, LOW);
+        for(int i=0;i<30;i++){
+            imwrite(path_tezhengduiying+std::to_string(i)+".jpg",imgset_pv[i]);
+            imwrite(path_tezhengduiying_pp+std::to_string(i)+".jpg",imgset_pp[i]);
+                
+        }
+		// while((!flag_roi)&&(i<30)){
+        //     if((roi_panduan(imgset_pv[i], ))==0){
+            
+        //         cout<<"i is:"<<i<<endl;
+        //         flag_roi=1;
+		// 	}
+		// 	i++;
+		// }
+		
+		// cv::Mat img0_shibie = cv::Mat::zeros(height, width, CV_8UC3);
+		// cv::Mat img1_shibie = cv::Mat::zeros(height, width, CV_8UC3);
+		// cam0.get_img(buffer1_shibie);
+		// cam1.get_img(buffer2_shibie);
+		// img_pp=cv::Mat::zeros(height, width, CV_8UC3);
+		// img_pv=cv::Mat::zeros(height, width, CV_8UC3);
+		// memcpy(img_pp.data, buffer1_shibie.data(), buffer1_shibie.size());
+		// memcpy(img_pv.data, buffer2_shibie.data(), buffer2_shibie.size());
 	
         
-        cv::imwrite(roipp_path+std::to_string(roi_count)+".jpg",img_pp);
-        cv::imwrite(roipv_path+std::to_string(roi_count)+".jpg",img_pv);
+        // cv::imwrite(roipp_path+std::to_string(roi_count)+".jpg",img_pp);
+        // cv::imwrite(roipv_path+std::to_string(roi_count)+".jpg",img_pv);
 
 
-		mutex_main.unlock();
+		
 
 		// for(int i = mainImg_vector.size() - 1; i >= 0; i--){ //后往前
 		// 	matOriginal_main = mainImg_vector[i];
@@ -203,10 +268,7 @@ void Dialog::get_palmImg() // 读取子线程的图片
 		// 		continue;
 		// 	}
 		// cvtColor(matOriginal_main, matOriginal_main, COLOR_GRAY2BGR);
-		QImage qimgOriginal((uchar*)img_pv.data, img_pv.cols, img_pv.rows, img_pv.step, QImage::Format_RGB888);
-		ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
-		QImage qimgOriginal2((uchar*)img_pp.data, img_pp.cols, img_pp.rows, img_pp.step, QImage::Format_RGB888);
-		ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+		
 
 
 		if (state == rec)
@@ -297,11 +359,57 @@ void Dialog::show_reco()
 {
     // clock_t start_time,end_time;
     int e_rror = 0;
-    
+    int i=10;
     ui->textBrowser->clear();
 	string hardOriginal = "../run_file/hard_Original/";
 	string hardRoi = "../run_file/hard_Roi/";
+	int flag_roi=0;
+	int count = 0;
+	cv::Mat roi_j;
+	float temp = temperature.READ_Temperature();
+	char reg_temp[50];
+    sprintf(reg_temp, "Hand temperature is %f\n", temp);
+	qDebug() << reg_temp;
+	ui->textBrowser->setFontPointSize(20);
+	ui->textBrowser->setFontWeight(QFont::Normal);
+	ui->textBrowser->insertPlainText(reg_temp);
+	ui->textBrowser->moveCursor(QTextCursor::End);
+
+	while((!flag_roi)&&(i<30)){
+		//~ QImage qimgOriginal((uchar*)imgset_pv[i].data, imgset_pv[i].cols, imgset_pv[i].rows, imgset_pv[i].step, QImage::Format_RGB888);
+		//~ ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+		//~ QImage qimgOriginal2((uchar*)imgset_pp[i].data, imgset_pp[i].cols, imgset_pp[i].rows, imgset_pp[i].step, QImage::Format_RGB888);
+		//~ ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+		if((roi_panduan(imgset_pv[i],roi_j))==0)
+		{
+			cout<<"can get roi number is:"<<i<<endl;
+			count = i;
+			
+			flag_roi=1;
+		}
+		i++;
+	}
+	if(!flag_roi){
+		QImage qimgOriginal((uchar*)imgset_pv[0].data, imgset_pv[0].cols, imgset_pv[0].rows, imgset_pv[0].step, QImage::Format_RGB888);
+		ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+		QImage qimgOriginal2((uchar*)imgset_pp[0].data, imgset_pp[0].cols, imgset_pp[0].rows, imgset_pp[0].step, QImage::Format_RGB888);
+		ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+		qDebug() << "Can not get ROI !!!";
+        ui->textBrowser->setFontPointSize(20);
+        ui->textBrowser->setFontWeight(QFont::Normal);
+        ui->textBrowser->insertPlainText("Can not get ROI !!!\n");
+        ui->textBrowser->moveCursor(QTextCursor::End);
+        return;
+	}
 	
+
+	cv::Mat display_img_pp = imgset_pp[count];
+	cv::Mat display_img_pv = imgset_pv[count];
+	QImage qimgOriginal((uchar*)display_img_pv.data, display_img_pv.cols, display_img_pv.rows, display_img_pv.step, QImage::Format_RGB888);
+	ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+	QImage qimgOriginal2((uchar*)display_img_pp.data, display_img_pp.cols, display_img_pp.rows, display_img_pp.step, QImage::Format_RGB888);
+	ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+
 	string timeStamp = getCurrentTime();
 //    static int pwm_val = 20;
 //    pwm_val += 5;
@@ -310,15 +418,16 @@ void Dialog::show_reco()
 //    QString qstring = "now pwm_val: " + QString::number(pwm_val) + "\n";
 //    ui->textBrowser->insertPlainText(qstring);
 //    ui->textBrowser->moveCursor(QTextCursor::End);
-    Mat matOriginalPV =img_pv.clone();
-	Mat matOriginalPP =img_pp.clone();
+    Mat matOriginalPV =imgset_pv[count].clone();
+	Mat matOriginalPP =imgset_pp[count].clone();
 
     cv::Mat final_roi_imagePV, final_roi_imageEnhancePV, reco_showImgPV, \
 		final_roi_imagePP, final_roi_imageEnhancePP, reco_showImgPP;
 
 	cv::imwrite("../run_file/reco_originalPV.bmp",matOriginalPV);
 	cv::imwrite("../run_file/reco_originalPP.bmp",matOriginalPP);
-    final_roi_imagePV = getRoiImg(matOriginalPV, true, "PV", e_rror, reco_showImgPV);
+    final_roi_imagePV = getRoiImg(matOriginalPV, true, "PV", e_rror, reco_showImgPV, CP);
+	
 	final_roi_imagePP = matOriginalPP.clone();//先这么写着
 //    normalize2(final_roi_image);2
     cv::imwrite("../run_file/reco_roipv.bmp",final_roi_imagePV);
@@ -342,7 +451,7 @@ void Dialog::show_reco()
 	Enhancement(final_roi_imagePP, final_roi_imageEnhancePP);
     cv::imwrite("../run_file/Enhance_recopp.bmp",final_roi_imageEnhancePP);
 	//掌脉
-    ncnn::Mat feature2 = net.extract_feature(final_roi_imageEnhancePV);
+    ncnn::Mat feature2 = net.extract_featurePV(final_roi_imageEnhancePV);
     ncnn::Mat feature2_flatten = feature2.reshape(feature2.w * feature2.h * feature2.c);
     vector<float> feature;
     feature.resize(feature2_flatten.w);
@@ -355,7 +464,7 @@ void Dialog::show_reco()
     memcpy(feature_arrayPV,&feature[0],feature.size()*sizeof(feature[0]));
 	//掌纹
 	
-	feature2 = net.extract_feature(final_roi_imageEnhancePP);
+	feature2 = net.extract_featurePP(final_roi_imageEnhancePP);
     feature2_flatten = feature2.reshape(feature2.w * feature2.h * feature2.c);
 	feature.clear();
 	feature.resize(feature2_flatten.w);
@@ -376,6 +485,7 @@ void Dialog::show_reco()
 //    ui->textBrowser->setFontWeight(75);
 //    std::string string= "result:id="+final_result.id+"\n";
     cout<<"id:"<<final_result.id<<" score:"<<final_result.score<<endl;
+	qDebug() << "show CP param:" << CP.rotateangle << ", " << CP.dis << " point: " << CP.square_point.x << ". " << CP.square_point.y;
     if (final_result.score < 0.25f && final_result.score > 0)
     {
         ui->textBrowser->setFontPointSize(20);
@@ -386,6 +496,8 @@ void Dialog::show_reco()
         qstring = "度量距离 : " + QString::number(final_result.score) + "\n";
         ui->textBrowser->insertPlainText(qstring);
         ui->textBrowser->moveCursor(QTextCursor::End);
+		//open gate
+		gate1.Open_gate();
     }
 	else if(final_result.score == 3)
     {
@@ -492,14 +604,49 @@ void Dialog::register_id()
     id = ui->textEdit->toPlainText();
     string string_id = id.toStdString();
 
+	int flag_roi=0;
+	int count = 0;
+	cv::Mat roi_j;
+	int i = 0;
+	while((!flag_roi)&&(i<30)){
+		
+		if((roi_panduan(imgset_pv[i],roi_j))==0)
+		{
+			cout<<"can get roi number is:"<<i<<endl;
+			count = i;
+			
+			flag_roi=1;
+		}
+		i++;
+	}
+	if(!flag_roi){
+		QImage qimgOriginal((uchar*)imgset_pv[0].data, imgset_pv[0].cols, imgset_pv[0].rows, imgset_pv[0].step, QImage::Format_RGB888);
+		ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+		QImage qimgOriginal2((uchar*)imgset_pp[0].data, imgset_pp[0].cols, imgset_pp[0].rows, imgset_pp[0].step, QImage::Format_RGB888);
+		ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+		qDebug() << "Can not get ROI !!!";
+        ui->textBrowser->setFontPointSize(20);
+        ui->textBrowser->setFontWeight(QFont::Normal);
+        ui->textBrowser->insertPlainText("Can not get ROI !!!\n");
+        ui->textBrowser->moveCursor(QTextCursor::End);
+		db.close();
+        return;
+	}
+	cv::Mat display_img_pp = imgset_pp[count].clone();
+	cv::Mat display_img_pv = imgset_pv[count].clone();
+	QImage qimgOriginal((uchar*)display_img_pv.data, display_img_pv.cols, display_img_pv.rows, display_img_pv.step, QImage::Format_RGB888);
+	ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+	QImage qimgOriginal2((uchar*)display_img_pp.data, display_img_pp.cols, display_img_pp.rows, display_img_pp.step, QImage::Format_RGB888);
+	ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+
     //ROI image
     cv::Mat register_matPV;
     cv::Mat register_roiPV, register_showImgPV;
 	cv::Mat register_matPP, register_roiPP; 
     
     // capWebcam.read(register_mat);
-    register_matPV = img_pv.clone();
-	register_matPP = img_pp.clone();
+    register_matPV = imgset_pv[count].clone();
+	register_matPP = imgset_pp[count].clone();
 
     string defaultPath = "../run_file/qt_register/";
     string showPath = "../run_file/qt_register_valleypoint/";
@@ -526,7 +673,7 @@ void Dialog::register_id()
     db.setDatabaseName(QApplication::applicationDirPath()+"/database.dat");
     db.open();
 	
-    register_roiPV = getRoiImg(register_matPV, true, "1", e_rror, register_showImgPV); // BGR
+    register_roiPV = getRoiImg(register_matPV, true, "1", e_rror, register_showImgPV, CP); // BGR
 	register_roiPP = register_matPP.clone(); //暂时这么写着
     if(e_rror == 1){
         qDebug() << "Can not get ROI !!!";
@@ -557,10 +704,12 @@ void Dialog::register_id()
     // Image_normalize(register_roi, register_roi);
 	//掌脉特征
     Enhancement(register_roiPV, register_roiPV);
-    ncnn::Mat feature2 = net.extract_feature(register_roiPV);
+    ncnn::Mat feature2 = net.extract_featurePV(register_roiPV);
     ncnn::Mat feature2_flatten = feature2.reshape(feature2.w * feature2.h * feature2.c);
+	cout<<"PVfeature size: "<<feature2_flatten.w<<endl;
 	//待存储的特征向量
     vector<float> feature;
+	//两倍长度
     feature.resize(feature2_flatten.w * 2);
     for (int j=0; j<feature2_flatten.w; j++)
     {
@@ -568,8 +717,9 @@ void Dialog::register_id()
     }
 	//掌纹特征
     Enhancement(register_roiPP, register_roiPP);
-    feature2 = net.extract_feature(register_roiPP);
+    feature2 = net.extract_featurePP(register_roiPP);
     feature2_flatten = feature2.reshape(feature2.w * feature2.h * feature2.c);
+	cout<<"PPfeature size: "<<feature2_flatten.w<<endl;
 	for (int j=feature2_flatten.w; j<feature2_flatten.w*2; j++)
     {
         feature[j] = feature2_flatten[j-feature2_flatten.w]; // 99
@@ -802,7 +952,7 @@ Dialog::result Dialog::recognition(float featurePV[], float featurePP[]){
     //     }
     }while (query.next());
 	//融合之后的距离
-	float AlphaPV = 0.5;
+	float AlphaPV = 0.9;
 	vector<float> dist_list(dist_listPV.size());
 	for(unsigned int i = 0; i < dist_listPV.size(); i++){
 		dist_list.at(i) = dist_listPV.at(i)*AlphaPV + dist_listPP.at(i)*(1-AlphaPV);
@@ -880,9 +1030,9 @@ Dialog::result Dialog::recognition(float featurePV[], float featurePP[]){
             }
         }
     }
-    if(max_vote == 5 && max_dis < 0.28f && max_dis >= 0.2f)
+    if(max_vote == 5 && max_dis < 0.2f && max_dis >= 0.15f)
     {
-        max_dis = 0.199f;
+        max_dis = 0.149f;
     }
 
     query.first();
@@ -897,7 +1047,7 @@ Dialog::result Dialog::recognition(float featurePV[], float featurePP[]){
 // NCNN
 void Dialog::Enhancement(Mat input, Mat &output){
 
-    cv::resize(input, input, Size(320, 320), 0, 0);
+    cv::resize(input, input, Size(224, 224), 0, 0);
     Mat input2 = input.clone();
     cvtColor(input2, input2, COLOR_BGR2GRAY);
     Ptr<CLAHE> clahe = createCLAHE();
@@ -1060,6 +1210,18 @@ void Dialog::register_id()
     id = ui->textEdit->toPlainText();
     string string_id = id.toStdString();
     
+
+    // while((!flag_roi)&&(i<30)){
+	// 	i++;
+	// 	if((getRoi(imgset_pv[i]))==0)
+	// 	{
+	// 		cout<<"i is:"<<i<<endl;
+	// 		count = i;
+	// 		flag_roi=1;
+	// 	}
+	// }
+
+
     cv::Mat register_mat;
     cv::Mat register_roi, register_showImg;
     
@@ -2056,7 +2218,7 @@ int OTSU(Mat image)
 // }
 
 
-cv::Mat Dialog::getRoiImg(cv::Mat PalmveinImg, bool flag_showImg, string PPorPV, int &e_rror, Mat &showImg2) // 输入bgr图片 得到roi图片
+cv::Mat Dialog::getRoiImg(cv::Mat PalmveinImg, bool flag_showImg, string PPorPV, int &e_rror, Mat &showImg2, CropParam & CP) // 输入bgr图片 得到roi图片
 {
 	/*********************************************
 	 * 掌纹ROI截取
@@ -2219,7 +2381,7 @@ cv::Mat Dialog::getRoiImg(cv::Mat PalmveinImg, bool flag_showImg, string PPorPV,
 	}
 	cout << "get_square_twopoints \n";
 
-	Mat ROI_Palmvein = get_palm_ROI(PalmveinImg_gray, squarepoint, e_rror); // 灰度图
+	Mat ROI_Palmvein = get_palm_ROI(PalmveinImg_gray, squarepoint, e_rror, CP); // 灰度图
 	if (e_rror == 1)
 	{
 		cout << "get wrong ROI!!!! \n";
@@ -2969,7 +3131,7 @@ int Dialog::get_square_twopoints(Point* areapoint, int& totalnum, int& beginpoin
     
 // }
 
-Mat Dialog::get_palm_ROI(Mat srcImg, const Point* square_points, int& e_rror)  //Ҳ�ᱨ�� �޷��أ�
+Mat Dialog::get_palm_ROI(Mat srcImg, const Point* square_points, int& e_rror, CropParam & CP)  //Ҳ�ᱨ�� �޷��أ�
 {
 	/************************************
 	 * Ѱ�������ǵ�
@@ -2982,6 +3144,7 @@ Mat Dialog::get_palm_ROI(Mat srcImg, const Point* square_points, int& e_rror)  /
 	if (square_points[0].x == square_points[1].x) // 图片没有旋转
 	{
 		rotateImg = srcImg.clone();
+		CP.rotateangle = 0;
 	}
 	else
 	{
@@ -2998,7 +3161,9 @@ Mat Dialog::get_palm_ROI(Mat srcImg, const Point* square_points, int& e_rror)  /
 		rotateangle = static_cast<int>(floor(atan(static_cast<float>(square_points[0].x - square_points[1].x) / (square_points[1].y - square_points[0].y)) * 180 / 3.1416 + 0.5));
 		rotateangle = (rotateangle + 360) % 360;
 		rotateImage(srcImg, rotateImg, rotatecenter, rotateangle); // 旋转灰度图
+		CP.rotateangle = rotateangle;
 	}
+	CP.square_point = square_points[0];
 	/*imshow("img", rotateImg);
 	waitKey();*/
 	int dis = static_cast<int>(Dis_of_twoPoint(square_points[0], square_points[1]));
@@ -3086,6 +3251,7 @@ Mat Dialog::get_palm_ROI(Mat srcImg, const Point* square_points, int& e_rror)  /
 	}
 	//Rect square(square_points[0].x + addX, square_points[0].y + addL - dis_y, dis_x, dis_y);
 	Rect square(square_points[0].x - divX, square_points[0].y + add_downL - dis_y, dis_x, dis_y);
+	CP.dis = dis_x;
 	/*rectangle(rotateImg, square, Scalar(0, 0, 255), 2);
 	imshow("rect", rotateImg);
 	waitKey();*/
@@ -3331,4 +3497,35 @@ void Dialog::rotateImage(Mat srcImg, Mat& rotateImg, Point2f rotatecenter, int r
 	// cv2DRotationMatrix(rotatecenter, rotateangle, 1, &M);
 	// cvWarpAffine(srcImg, rotateImg, &M, CV_INTER_LINEAR + CV_WARP_FILL_OUTLIERS, cvScalarAll(0));
     warpAffine(srcImg, rotateImg, M, srcImg.size(), INTER_CUBIC, BORDER_REPLICATE);
+}
+
+int Dialog::getRoi(cv::Mat matOriginal, cv::Mat& output)
+{
+    // 旋转， 竖着不要横着要
+    // cv::rotate(matOriginal,matOriginal,ROTATE_90_CLOCKWISE);
+
+    cv::Mat final_roi_image, reco_showImg;
+
+	// cv::imwrite(base+string("reco_original.bmp"),matOriginal);
+    int e_rror = 0;
+    output = getRoiImg(matOriginal, true, "reco.bmp", e_rror, reco_showImg, CP);
+	// DEBUG_save("roi.bmp",output);
+//    normalize2(final_roi_image);
+	cout<<"e_rror"<<e_rror<<endl;
+    if((!e_rror))
+        return 0;
+    return 1;
+}
+
+int Dialog::roi_panduan(cv::Mat img, cv::Mat& roi)
+{
+    //cv::Mat roi;
+    //cnt++;
+    int status = getRoi(img, roi);
+    //cout<<"status: "<<status;
+    if(status){
+        cout<<"提取ROI失败"<<endl;
+        return 1;}
+   
+    return 0;
 }
