@@ -32,7 +32,7 @@ A4gate gate1(false);
 
 cv::Mat imgset_pv[31];
 cv::Mat imgset_pp[31];
-
+int update_daojishi = 0;
  
 // 线程
 auto t_cam0 = async(&CAMERA::update_img , &cam0);
@@ -55,14 +55,16 @@ Dialog::Dialog(QWidget *parent) : QDialog(parent),ui(new Ui::Dialog)
 
 	ui->textBrowser->setFontPointSize(20);
 	ui->textBrowser->setFontWeight(QFont::Normal);
+	img_pp_display=cv::Mat::zeros(height, width, CV_8UC3);
+	img_pv_display=cv::Mat::zeros(height, width, CV_8UC3);
 
-    refreshTime = 30;
+    refreshTime = 50;
 	
 	// 显示掌静脉logo----------------------------
-    Mat logo = imread("../1.jpg");
+    // Mat logo = imread("../1.jpg");
 	
-	QImage qlogo((uchar*)logo.data, logo.cols, logo.rows, logo.step, QImage::Format_RGB888);
-	ui->processed->setPixmap(QPixmap::fromImage(qlogo)); // show the Image
+	// QImage qlogo((uchar*)logo.data, logo.cols, logo.rows, logo.step, QImage::Format_RGB888);
+	// ui->processed->setPixmap(QPixmap::fromImage(qlogo)); // show the Image
 	// ----------------------------------
 
 	//相机线程
@@ -76,8 +78,8 @@ Dialog::Dialog(QWidget *parent) : QDialog(parent),ui(new Ui::Dialog)
     connect(meas1, SIGNAL(detected_palm()), this, SLOT(get_palmImg()));
     connect(meas1, SIGNAL(finished()), thread, SLOT(quit()), Qt::DirectConnection);
 
-    // tmrTimer = new QTimer(this);
-    // connect(tmrTimer, SIGNAL(timeout()), this, SLOT(processFrameAndUpdateGUI()));
+    tmrTimer = new QTimer(this);
+    connect(tmrTimer, SIGNAL(timeout()), this, SLOT(processFrameAndUpdateGUI()));
 //    connect(tmrTimer, SIGNAL(timeout()), this, SLOT(show_running()));
     connect(ui->register_btn,SIGNAL(clicked(bool)),this,SLOT(change_state_reg()));
     connect(ui->del_btn,SIGNAL(clicked(bool)),this,SLOT(del_oneuser()));
@@ -87,7 +89,7 @@ Dialog::Dialog(QWidget *parent) : QDialog(parent),ui(new Ui::Dialog)
 
 //    connect(ui->quit, SIGNAL(clicked()), qApp, SLOT(quit()));
 
-    // tmrTimer->start(refreshTime);
+    tmrTimer->start(refreshTime);
     // 输出pwm
     // softPwmWrite(pwm_pin, 32);
 
@@ -105,9 +107,9 @@ Dialog::~Dialog()
     meas1->stopwork();
     thread->wait();
     qDebug()<<"Deleting thread and measurement in Thread "<<this->QObject::thread()->currentThreadId();
+	tmrTimer->stop();
     delete thread;
     delete meas1;
-    
     delete ui;
 }
 /////////////////////////////////////////////////////////////////////////////
@@ -158,6 +160,26 @@ void Dialog::processFrameAndUpdateGUI()
     // {
     //     register_id();
     // }
+	if(--update_daojishi > 0){
+		if(update_daojishi == update_daojishi_count-1){
+			QImage qimgOriginal((uchar*)img_pv_display.data, img_pv_display.cols, img_pv_display.rows, img_pv_display.step, QImage::Format_RGB888);
+			ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+			QImage qimgOriginal2((uchar*)img_pp_display.data, img_pp_display.cols, img_pp_display.rows, img_pp_display.step, QImage::Format_RGB888);
+			ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+		}
+		return;
+	}
+	std::vector<uint8_t> buffer1_shibie;
+	std::vector<uint8_t> buffer2_shibie;
+	cam0.get_img(buffer1_shibie);
+	cam1.get_img(buffer2_shibie);
+	memcpy(img_pp_display.data, buffer1_shibie.data(), buffer1_shibie.size());
+	memcpy(img_pv_display.data, buffer2_shibie.data(), buffer2_shibie.size());
+	QImage qimgOriginal((uchar*)img_pv_display.data, img_pv_display.cols, img_pv_display.rows, img_pv_display.step, QImage::Format_RGB888);
+	ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+	QImage qimgOriginal2((uchar*)img_pp_display.data, img_pp_display.cols, img_pp_display.rows, img_pp_display.step, QImage::Format_RGB888);
+	ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+
     return;
 }
 
@@ -204,12 +226,12 @@ void Dialog::get_palmImg() // 读取子线程的图片
         std::vector<uint8_t> buffer1_shibie;
 		std::vector<uint8_t> buffer2_shibie;
 		
-		for(int i=0;i<30;i++){
+		for(int i=0;i<capturenum_onetime;i++){
 				imgset_pv[i]=cv::Mat::zeros(height, width, CV_8UC3);
 				imgset_pp[i]=cv::Mat::zeros(height, width, CV_8UC3);
 			}
         
-        for(int i=0;i<30;i++)
+        for(int i=0;i<capturenum_onetime;i++)
         {
             // this_thread::sleep_for(chrono::milliseconds(10));
 			sleep(0.01);
@@ -231,8 +253,8 @@ void Dialog::get_palmImg() // 读取子线程的图片
             //cout<<"444"<<endl;
         }
         // io.lED_OFF();
-		// digitalWrite(LEDPin, LOW);
-        for(int i=0;i<30;i++){
+		digitalWrite(LEDPin, LOW);
+        for(int i=0;i<capturenum_onetime;i++){
             imwrite(path_tezhengduiying+std::to_string(i)+".jpg",imgset_pv[i]);
             imwrite(path_tezhengduiying_pp+std::to_string(i)+".jpg",imgset_pp[i]);
                 
@@ -278,12 +300,14 @@ void Dialog::get_palmImg() // 读取子线程的图片
 		else if (state == reg)
 		{
 			register_id();
+			cout<<"return from register_id()"<<endl;
 		}
 
 		// 	meas1->complete_oneImg();
 		// }
 		mutex_main.lock();
 		rec_reg_finished = true;
+		cout<<"rec_reg_finished"<<rec_reg_finished<<endl;
 		mutex_main.unlock();
 		// cout << "BGR Image" << endl;
 		// for(int i = 240; i < 243; i++)
@@ -359,7 +383,7 @@ void Dialog::show_reco()
 {
     // clock_t start_time,end_time;
     int e_rror = 0;
-    int i=10;
+    int i=0;
     ui->textBrowser->clear();
 	string hardOriginal = "../run_file/hard_Original/";
 	string hardRoi = "../run_file/hard_Roi/";
@@ -375,7 +399,7 @@ void Dialog::show_reco()
 	ui->textBrowser->insertPlainText(reg_temp);
 	ui->textBrowser->moveCursor(QTextCursor::End);
 
-	while((!flag_roi)&&(i<30)){
+	while((!flag_roi)&&(i<capturenum_onetime)){
 		//~ QImage qimgOriginal((uchar*)imgset_pv[i].data, imgset_pv[i].cols, imgset_pv[i].rows, imgset_pv[i].step, QImage::Format_RGB888);
 		//~ ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
 		//~ QImage qimgOriginal2((uchar*)imgset_pp[i].data, imgset_pp[i].cols, imgset_pp[i].rows, imgset_pp[i].step, QImage::Format_RGB888);
@@ -390,10 +414,10 @@ void Dialog::show_reco()
 		i++;
 	}
 	if(!flag_roi){
-		QImage qimgOriginal((uchar*)imgset_pv[0].data, imgset_pv[0].cols, imgset_pv[0].rows, imgset_pv[0].step, QImage::Format_RGB888);
-		ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
-		QImage qimgOriginal2((uchar*)imgset_pp[0].data, imgset_pp[0].cols, imgset_pp[0].rows, imgset_pp[0].step, QImage::Format_RGB888);
-		ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+		// QImage qimgOriginal((uchar*)imgset_pv[0].data, imgset_pv[0].cols, imgset_pv[0].rows, imgset_pv[0].step, QImage::Format_RGB888);
+		// ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+		// QImage qimgOriginal2((uchar*)imgset_pp[0].data, imgset_pp[0].cols, imgset_pp[0].rows, imgset_pp[0].step, QImage::Format_RGB888);
+		// ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
 		qDebug() << "Can not get ROI !!!";
         ui->textBrowser->setFontPointSize(20);
         ui->textBrowser->setFontWeight(QFont::Normal);
@@ -403,12 +427,12 @@ void Dialog::show_reco()
 	}
 	
 
-	cv::Mat display_img_pp = imgset_pp[count];
-	cv::Mat display_img_pv = imgset_pv[count];
-	QImage qimgOriginal((uchar*)display_img_pv.data, display_img_pv.cols, display_img_pv.rows, display_img_pv.step, QImage::Format_RGB888);
-	ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
-	QImage qimgOriginal2((uchar*)display_img_pp.data, display_img_pp.cols, display_img_pp.rows, display_img_pp.step, QImage::Format_RGB888);
-	ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+	// cv::Mat display_img_pp = imgset_pp[count];
+	// cv::Mat display_img_pv = imgset_pv[count];
+	// QImage qimgOriginal((uchar*)display_img_pv.data, display_img_pv.cols, display_img_pv.rows, display_img_pv.step, QImage::Format_RGB888);
+	// ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+	// QImage qimgOriginal2((uchar*)display_img_pp.data, display_img_pp.cols, display_img_pp.rows, display_img_pp.step, QImage::Format_RGB888);
+	// ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
 
 	string timeStamp = getCurrentTime();
 //    static int pwm_val = 20;
@@ -420,19 +444,22 @@ void Dialog::show_reco()
 //    ui->textBrowser->moveCursor(QTextCursor::End);
     Mat matOriginalPV =imgset_pv[count].clone();
 	Mat matOriginalPP =imgset_pp[count].clone();
+	update_daojishi = update_daojishi_count;
+	img_pp_display = imgset_pp[count].clone();
+	img_pv_display = imgset_pv[count].clone();
 
     cv::Mat final_roi_imagePV, final_roi_imageEnhancePV, reco_showImgPV, \
 		final_roi_imagePP, final_roi_imageEnhancePP, reco_showImgPP;
 
-	cv::imwrite("../run_file/reco_originalPV.bmp",matOriginalPV);
-	cv::imwrite("../run_file/reco_originalPP.bmp",matOriginalPP);
+	cv::imwrite("../run_file/reco_originalPV.bmp",matOriginalPV); //原始PV图片
+	cv::imwrite("../run_file/reco_originalPP.bmp",matOriginalPP); //原始PP图片
     final_roi_imagePV = getRoiImg(matOriginalPV, true, "PV", e_rror, reco_showImgPV, CP);
 	
 	final_roi_imagePP = matOriginalPP.clone();//先这么写着
 //    normalize2(final_roi_image);2
-    cv::imwrite("../run_file/reco_roipv.bmp",final_roi_imagePV);
-    cv::imwrite("../run_file/valleypoint_recopv.bmp",reco_showImgPV);
-	cv::imwrite("../run_file/reco_roipp.bmp",final_roi_imagePP);
+    cv::imwrite("../run_file/reco_roipv.bmp",final_roi_imagePV);//pv ROI图片
+    cv::imwrite("../run_file/valleypoint_recopv.bmp",reco_showImgPV); //pv 关键点图片
+	cv::imwrite("../run_file/reco_roipp.bmp",final_roi_imagePP);//pp ROI图片
     // cv::imwrite("../run_file/valleypoint_recopp.bmp",reco_showImgPP);
 	if(e_rror == 1){
         qDebug() << "Can not get ROI !!!";
@@ -447,9 +474,9 @@ void Dialog::show_reco()
     }
 
     Enhancement(final_roi_imagePV, final_roi_imageEnhancePV);
-    cv::imwrite("../run_file/Enhance_recopv.bmp",final_roi_imageEnhancePV);
+    cv::imwrite("../run_file/Enhance_recopv.bmp",final_roi_imageEnhancePV);//pv ROI图片增强
 	Enhancement(final_roi_imagePP, final_roi_imageEnhancePP);
-    cv::imwrite("../run_file/Enhance_recopp.bmp",final_roi_imageEnhancePP);
+    cv::imwrite("../run_file/Enhance_recopp.bmp",final_roi_imageEnhancePP);//pp ROI图片增强
 	//掌脉
     ncnn::Mat feature2 = net.extract_featurePV(final_roi_imageEnhancePV);
     ncnn::Mat feature2_flatten = feature2.reshape(feature2.w * feature2.h * feature2.c);
@@ -608,7 +635,7 @@ void Dialog::register_id()
 	int count = 0;
 	cv::Mat roi_j;
 	int i = 0;
-	while((!flag_roi)&&(i<30)){
+	while((!flag_roi)&&(i<capturenum_onetime)){
 		
 		if((roi_panduan(imgset_pv[i],roi_j))==0)
 		{
@@ -620,48 +647,91 @@ void Dialog::register_id()
 		i++;
 	}
 	if(!flag_roi){
-		QImage qimgOriginal((uchar*)imgset_pv[0].data, imgset_pv[0].cols, imgset_pv[0].rows, imgset_pv[0].step, QImage::Format_RGB888);
-		ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
-		QImage qimgOriginal2((uchar*)imgset_pp[0].data, imgset_pp[0].cols, imgset_pp[0].rows, imgset_pp[0].step, QImage::Format_RGB888);
-		ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+		// QImage qimgOriginal((uchar*)imgset_pv[0].data, imgset_pv[0].cols, imgset_pv[0].rows, imgset_pv[0].step, QImage::Format_RGB888);
+		// ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+		// QImage qimgOriginal2((uchar*)imgset_pp[0].data, imgset_pp[0].cols, imgset_pp[0].rows, imgset_pp[0].step, QImage::Format_RGB888);
+		// ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
 		qDebug() << "Can not get ROI !!!";
         ui->textBrowser->setFontPointSize(20);
         ui->textBrowser->setFontWeight(QFont::Normal);
         ui->textBrowser->insertPlainText("Can not get ROI !!!\n");
         ui->textBrowser->moveCursor(QTextCursor::End);
-		db.close();
+		// db.close();
         return;
 	}
 	cv::Mat display_img_pp = imgset_pp[count].clone();
 	cv::Mat display_img_pv = imgset_pv[count].clone();
-	QImage qimgOriginal((uchar*)display_img_pv.data, display_img_pv.cols, display_img_pv.rows, display_img_pv.step, QImage::Format_RGB888);
-	ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
-	QImage qimgOriginal2((uchar*)display_img_pp.data, display_img_pp.cols, display_img_pp.rows, display_img_pp.step, QImage::Format_RGB888);
-	ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+	update_daojishi = update_daojishi_count;
+	img_pp_display = imgset_pp[count].clone();
+	img_pv_display = imgset_pv[count].clone();
+	// QImage qimgOriginal((uchar*)display_img_pv.data, display_img_pv.cols, display_img_pv.rows, display_img_pv.step, QImage::Format_RGB888);
+	// ui->processed->setPixmap(QPixmap::fromImage(qimgOriginal)); // show the Image
+	// QImage qimgOriginal2((uchar*)display_img_pp.data, display_img_pp.cols, display_img_pp.rows, display_img_pp.step, QImage::Format_RGB888);
+	// ui->processed_2->setPixmap(QPixmap::fromImage(qimgOriginal2)); // show the Image
+	// 按键确认图片
+	ui->textBrowser->setFontPointSize(15);
+	ui->textBrowser->setFontWeight(QFont::Normal);
+	// ui->textBrowser->insertPlainText("按键确认是否保存原图，“s”保存，“q”不保存\n");
+	ui->textBrowser->append("按键确认是否保存原图，“s”保存，“q”不保存\n");
+	ui->textBrowser->moveCursor(QTextCursor::End);
+	//显示图片
+	// vector<cv::Mat>Images(2);//模板类vector，用于放置4个类型为Mat的元素，即四张图片  
+	// Images[0] = display_img_pv;
+	// Images[1] = display_img_pp;
+	cv::namedWindow("PV",0);
+	cv::moveWindow("PV",10,10);
+	cv::resizeWindow("PV", cv::Size(480, 480));
+	cv::imshow("PV", display_img_pv);
+	cv::namedWindow("PP",0);
+	cv::moveWindow("PP",490,10);
+	cv::resizeWindow("PP", cv::Size(480, 480));
+	cv::imshow("PP", display_img_pp);
+
+	char a;
+	do{
+		a = cv::waitKey(0);
+	}while(a!='q' && a!= 's');
+	if(a == 'q'){
+		ui->textBrowser->append("不保存当前图片，请重新采集\n");
+		ui->textBrowser->moveCursor(QTextCursor::End);
+		cv::destroyWindow("PV");
+		cv::destroyWindow("PP");
+		return;
+	}
+	else{
+		ui->textBrowser->append("成功保存继续采集\n");
+		ui->textBrowser->moveCursor(QTextCursor::End);
+	}
+
 
     //ROI image
-    cv::Mat register_matPV;
-    cv::Mat register_roiPV, register_showImgPV;
-	cv::Mat register_matPP, register_roiPP; 
+    cv::Mat register_matPV, register_matPP;
+    cv::Mat register_roiPV, register_roiPP, register_showImgPV; 
     
     // capWebcam.read(register_mat);
     register_matPV = imgset_pv[count].clone();
+	
+	if(count<9){
+		cout<<"count"<<count<<endl;
+		count=count++;
+		cout<<"count"<<count<<endl;
+	}
 	register_matPP = imgset_pp[count].clone();
 
-    string defaultPath = "../run_file/qt_register/";
-    string showPath = "../run_file/qt_register_valleypoint/";
+    string originalPVPath = "../run_file/register_originalPV/";//注册的PV原图保存路径
+    string originalPPPath = "../run_file/register_originalPP/";//注册的PP原图保存路径
 	//保存注册时期拍到的图片
     string PPRoiPath = "../run_file/qt_register_roiPP/";
 	string PVRoiPath = "../run_file/qt_register_roiPV/";
 	//创建文件夹
-    if (0 != access(PPRoiPath.c_str(), 0))
+    if (0 != access(originalPVPath.c_str(), 0))
     {
-        mkdir(PPRoiPath.c_str(),0777);   // 返回 0 表示创建成功，-1 表示失败
+        mkdir(originalPVPath.c_str(),0777);   // 返回 0 表示创建成功，-1 表示失败
         //换成 ::_mkdir  ::_access 也行，不知道什么意思
     }
-	if (0 != access(PVRoiPath.c_str(), 0))
+	if (0 != access(originalPPPath.c_str(), 0))
     {
-        mkdir(PVRoiPath.c_str(),0777);   // 返回 0 表示创建成功，-1 表示失败
+        mkdir(originalPPPath.c_str(),0777);   // 返回 0 表示创建成功，-1 表示失败
         //换成 ::_mkdir  ::_access 也行，不知道什么意思
     }
 
@@ -675,28 +745,29 @@ void Dialog::register_id()
 	
     register_roiPV = getRoiImg(register_matPV, true, "1", e_rror, register_showImgPV, CP); // BGR
 	register_roiPP = register_matPP.clone(); //暂时这么写着
-    if(e_rror == 1){
-        qDebug() << "Can not get ROI !!!";
-        ui->textBrowser->setFontPointSize(20);
-        ui->textBrowser->setFontWeight(QFont::Normal);
-        ui->textBrowser->insertPlainText("Can not get ROI !!!\n");
-        ui->textBrowser->moveCursor(QTextCursor::End);
-		db.close();
-        // mutex_main.lock();
-        // rec_reg_finished = true;
-        // mutex_main.unlock();
-        return;
-    }
+    // if(e_rror == 1){
+    //     qDebug() << "Can not get ROI !!!";
+    //     ui->textBrowser->setFontPointSize(20);
+    //     ui->textBrowser->setFontWeight(QFont::Normal);
+    //     ui->textBrowser->insertPlainText("Can not get ROI !!!\n");
+    //     ui->textBrowser->moveCursor(QTextCursor::End);
+	// 	db.close();
+    //     // mutex_main.lock();
+    //     // rec_reg_finished = true;
+    //     // mutex_main.unlock();
+    //     return;
+    // }
     reg_num += 1;
     qDebug() << reg_num;
-    string save_dir = defaultPath + string_id + "_" + to_string(reg_num) + ".bmp";
-    string show_dir = showPath + string_id + "_" + to_string(reg_num) + ".bmp";
+    string originalPV_dir = originalPVPath + string_id + "_" + to_string(reg_num) + ".bmp";// PV注册图片的名字
+    string originalPP_dir = originalPPPath + string_id + "_" + to_string(reg_num) + ".bmp";
     string savePVroi_dir = PVRoiPath + string_id + "_" + to_string(reg_num) + ".bmp";
 	string savePProi_dir = PPRoiPath + string_id + "_" + to_string(reg_num) + ".bmp";
 //    normalize2(register_roi);
     //   cv::imwrite("/home/pi/Downloads/roi.jpg",register_roi);
     // normalize(register_roi);
-    cv::imwrite(show_dir,register_showImgPV);
+    cv::imwrite(originalPV_dir,register_matPV);
+	cv::imwrite(originalPP_dir,register_matPP);
     cv::imwrite(savePVroi_dir,register_roiPV);
 	cv::imwrite(savePProi_dir,register_roiPP);
 //   cv::Mat register_roi2 = img_normalize(register_roi);
@@ -755,10 +826,12 @@ void Dialog::register_id()
 		ui->textBrowser->setFontWeight(QFont::Normal);
 		ui->textBrowser->insertPlainText("成功采集 : 1 / 10\n");
 		ui->textBrowser->moveCursor(QTextCursor::End);
-		cv::imwrite(save_dir,register_matPV); // 原图
+		//~ cv::imwrite(save_dir,register_matPV); // 原图
 		// mutex_main.lock();
 		// rec_reg_finished = true;
 		// mutex_main.unlock();
+		cv::destroyWindow("PV");
+		cv::destroyWindow("PP");
 		return;
 		
 	}
@@ -775,7 +848,7 @@ void Dialog::register_id()
     sprintf(reg_temp,"成功采集 : %d / 10\n",reg_num);
     ui->textBrowser->insertPlainText(reg_temp);
     ui->textBrowser->moveCursor(QTextCursor::End);
-    cv::imwrite(save_dir,register_matPV);
+    //~ cv::imwrite(save_dir,register_matPV);
     // mutex_main.lock();
     // rec_reg_finished = true;
     // mutex_main.unlock();
@@ -783,19 +856,23 @@ void Dialog::register_id()
    {
     //    ui->textBrowser->setFontPointSize(20);
     //    ui->textBrowser->setFontWeight(QFont::Normal);
-       ui->textBrowser->insertPlainText("成功注册用户!\n");
-       ui->textBrowser->moveCursor(QTextCursor::End);
-       ui->textEdit->clear();
-       ui->textEdit->clearFocus();
-       state = rec;
-       reg_num = 0;
-       db.close();
+		ui->textBrowser->insertPlainText("成功注册用户!\n");
+		ui->textBrowser->moveCursor(QTextCursor::End);
+		ui->textEdit->clear();
+		ui->textEdit->clearFocus();
+		state = rec;
+		reg_num = 0;
+		db.close();
+		cv::destroyWindow("PV");
+		cv::destroyWindow("PP");
     //    mutex_main.lock();
     //    rec_reg_finished = true;
     //    mutex_main.unlock();
-       return;
+       	return;
    }
-   db.close();
+   	cv::destroyWindow("PV");
+	cv::destroyWindow("PP");
+   	db.close();
 }
 
 //NCNN版本

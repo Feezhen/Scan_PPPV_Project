@@ -88,6 +88,7 @@ void measure_dis::startwork()
         capture_right = digitalRead(GuangdianPin2);
         capture_left_tmp = capture_left;
         capture_right_tmp = capture_right;
+        sleep(0.05);
         capture_left = digitalRead(GuangdianPin1);
         capture_right = digitalRead(GuangdianPin2);
         capture_left_tmp2 = capture_left;
@@ -98,12 +99,20 @@ void measure_dis::startwork()
             readyFlag = true;
             digitalWrite(LEDPin, LOW);
             sleep(1);
+            continue;
+        }
+        // capture_left = digitalRead(GuangdianPin1);
+        // capture_right = digitalRead(GuangdianPin2);
+        // capture_left_tmp = capture_left;
+        // capture_right_tmp = capture_right;
+        if((capture_left_tmp ==0 || capture_right_tmp == 0) && readyFlag){
+            //qDebug()<<"open LED!!!!!!!!!!!!! ";
+            digitalWrite(LEDPin, HIGH);
         }
  
-        if((capture_left_tmp ==0 || capture_right_tmp == 0) && readyFlag) // 检测到了手掌 capture_left_tmp ==0 && capture_right_tmp == 0 && readyFlag
+        if((capture_left_tmp ==0 && capture_right_tmp == 0) && readyFlag) // 检测到了手掌 capture_left_tmp ==0 && capture_right_tmp == 0 && readyFlag
         {
-            qDebug()<<"open LED!!!!!!!!!!!!! ";
-            digitalWrite(LEDPin, HIGH); //打光
+            // digitalWrite(LEDPin, HIGH); //打光
             // 保存图片到队列里面
             // mutex.lock();
             // detected_palm = true;

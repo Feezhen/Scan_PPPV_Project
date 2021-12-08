@@ -58,6 +58,8 @@ struct CropParam
 #define NCNN
 
 #define feature_dim 1280
+#define update_daojishi_count 30
+#define capturenum_onetime 10
 
 #ifdef NCNN
 #define register_num 10
@@ -123,7 +125,7 @@ public:
     void detectAndDisplay(cv::Mat frame);
     void RestoreVectors(std::vector<std::vector<cv::Rect>>& vecs_bank, std::vector<cv::Rect>& vecAll);
     //*************截取手掌roi，参考王浩师兄代码*************
-    cv::Mat getRoiImg(cv::Mat PalmveinImg, bool flag_showImg, std::string imgName, int & e_rror, cv::Mat &showImg2, CropParam & CP);
+    cv::Mat getRoiImg(cv::Mat PalmveinImg,bool flag_showImg, std::string imgName, int & e_rror, cv::Mat &showImg2, CropParam & CP);
     cv::Mat finger_segmentation(cv::Mat img);
     cv::Mat prewitt_segmentation(cv::Mat img, std::string PPorPV);
     void imageblur(cv::Mat& src, cv::Mat& dst, cv::Size size, int threshold);
@@ -140,6 +142,7 @@ public:
     ~Dialog();
     //*************类外函数***********
     friend string getCurrentTime();
+    friend void imshowMany(const std::string& _winName, const vector<cv::Mat>& ployImages);
     //*************类外类***********
     friend class Camera;
 
@@ -165,6 +168,8 @@ private:
     // cv::Mat matOriginal_main;
     cv::Mat img_pp;
     cv::Mat img_pv;
+    cv::Mat img_pp_display;
+    cv::Mat img_pv_display;
     int width =640;// 640
     int height =480;//480
     int camid0 = 0;
